@@ -1,8 +1,8 @@
-import { createClient, type Client } from '@libsql/client';
+import { createClient, type Client, type InStatement, type ResultSet } from '@libsql/client';
 
 let _db: Client | null = null;
 
-export function getDb(): Client {
+function getDb(): Client {
   if (!_db) {
     const url = process.env.TURSO_DB_URL;
     const authToken = process.env.TURSO_DB_TOKEN;
@@ -12,7 +12,7 @@ export function getDb(): Client {
   return _db;
 }
 
-// Convenience alias — same interface as before
 export const db = {
-  execute: (...args: Parameters<Client['execute']>) => getDb().execute(...args),
+  execute: (stmt: InStatement): Promise<ResultSet> => getDb().execute(stmt),
+  batch: (stmts: InStatement[]) => getDb().batch(stmts),
 };
