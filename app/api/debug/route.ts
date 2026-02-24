@@ -8,8 +8,8 @@ export async function GET() {
       ok: true, 
       result: result.rows,
       env: {
-        url: process.env.TURSO_DB_URL?.slice(0, 30) + '...',
-        token: process.env.TURSO_DB_TOKEN ? 'SET' : 'NOT SET',
+        url: process.env.TURSO_DB_URL,
+        tokenLen: process.env.TURSO_DB_TOKEN?.length,
       }
     });
   } catch (err: unknown) {
@@ -17,10 +17,10 @@ export async function GET() {
     return NextResponse.json({ 
       ok: false, 
       error: e.message, 
-      stack: e.stack?.slice(0, 500),
+      stack: e.stack?.slice(0, 800),
       env: {
-        url: process.env.TURSO_DB_URL?.slice(0, 30) || 'NOT SET',
-        token: process.env.TURSO_DB_TOKEN ? 'SET' : 'NOT SET',
+        url: JSON.stringify(process.env.TURSO_DB_URL),
+        tokenLen: process.env.TURSO_DB_TOKEN?.length,
       }
     }, { status: 500 });
   }
