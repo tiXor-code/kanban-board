@@ -873,13 +873,14 @@ export default function CouncilPage() {
           }}
         />
 
-        {/* Header */}
+        {/* Header — sits below fixed NavTabs (top: 12px + ~36px height + 8px gap = 56px) */}
         <header
           style={{
             position: "relative",
             zIndex: 10,
             borderBottom: "1px solid #1f2937",
             padding: "14px 24px",
+            marginTop: "56px",
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
@@ -898,11 +899,6 @@ export default function CouncilPage() {
             >
               The Council
             </h1>
-            <div
-              aria-hidden="true"
-              style={{ width: "1px", height: "20px", background: "#1f2937" }}
-            />
-            <PhaseBar current={currentPhase} />
           </div>
 
           <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
@@ -1024,7 +1020,7 @@ export default function CouncilPage() {
                 </div>
               ))}
 
-              {/* Center label */}
+              {/* Center label / empty state */}
               <div
                 aria-hidden="true"
                 style={{
@@ -1032,14 +1028,31 @@ export default function CouncilPage() {
                   bottom: "20px",
                   left: "50%",
                   transform: "translateX(-50%)",
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  gap: "6px",
+                }}
+              >
+                <div style={{
                   fontFamily: "var(--font-syne)",
                   fontSize: "9px",
                   letterSpacing: "0.2em",
                   color: "#374151",
                   textTransform: "uppercase",
-                }}
-              >
-                ⬡ Deliberation Chamber
+                }}>
+                  ⬡ Deliberation Chamber
+                </div>
+                {!currentPhase && (
+                  <div style={{
+                    fontFamily: "monospace",
+                    fontSize: "10px",
+                    color: "#1f2937",
+                    textAlign: "center",
+                  }}>
+                    Awaiting session — use /council &lt;question&gt; in Telegram
+                  </div>
+                )}
               </div>
             </section>
 
