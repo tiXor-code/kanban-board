@@ -769,8 +769,8 @@ export default function CouncilPage() {
 
   const seatPositions = [
     { id: "gemini" as const, top: "0px", left: "50%", transform: "translateX(-50%)" },
-    { id: "gpt" as const, top: "110px", left: "60px", transform: "none" },
-    { id: "claude" as const, top: "110px", right: "60px", left: "auto", transform: "none" },
+    { id: "gpt" as const, top: "120px", left: "15%", transform: "none" },
+    { id: "claude" as const, top: "120px", right: "15%", left: "auto", transform: "none" },
   ];
 
   return (
