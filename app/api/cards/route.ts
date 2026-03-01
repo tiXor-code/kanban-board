@@ -1,12 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 
+function parseAssignees(raw: unknown): string[] {
+  if (!raw) return [];
+  if (typeof raw === 'string') {
+    try { const p = JSON.parse(raw); return Array.isArray(p) ? p : [p]; } catch { return raw ? [raw] : []; }
+  }
+  return [];
+}
+
 export async function GET() {
   try {
     const result = await db.execute('SELECT * FROM cards ORDER BY column_id, position');
     const cards = result.rows.map(r => ({
       ...r,
       labels: (() => { try { return JSON.parse(r.labels as string); } catch { return []; } })(),
+      assignees: parseAssignees(r.assignee),
     }));
     return NextResponse.json(cards);
   } catch (err) {
@@ -18,7 +27,7 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { column_id, title, description = '', labels = [], due_date = null, hours = 0, assignee = null, priority = null, sprint_id = null } = body;
+    const { column_id, title, description = '', labels = [], due_date = null, hours = 0, assignees = [], priority = null, sprint_id = null } = body;
 
     if (!column_id || !title) {
       return NextResponse.json({ error: 'column_id and title required' }, { status: 400 });
@@ -38,7 +47,7 @@ export async function POST(req: NextRequest) {
       args: [
         column_id, title, description,
         JSON.stringify(labels), due_date, maxPos + 1,
-        now, now, hours, assignee, priority, sprint_id,
+        now, now, hours, JSON.stringify(assignees), priority, sprint_id,
       ],
     });
 
@@ -46,6 +55,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       ...row,
       labels: (() => { try { return JSON.parse(row.labels as string || '[]'); } catch { return []; } })(),
+      assignees: parseAssignees(row.assignee),
     }, { status: 201 });
   } catch (err) {
     console.error('POST /api/cards error:', err);

@@ -16,7 +16,7 @@ import {
 
 interface Sprint { id: number; name: string; start_date: string | null; end_date: string | null; status: string; }
 interface Epic { id: number; title: string; color: string; description: string; }
-interface Card { id: number; column_id: number; title: string; description: string; labels: string[]; assignee: string | null; priority: string | null; sprint_id: number | null; hours: number; progress: number; epic_id: number | null; due_date: string | null; }
+interface Card { id: number; column_id: number; title: string; description: string; labels: string[]; assignees: string[]; priority: string | null; sprint_id: number | null; hours: number; progress: number; epic_id: number | null; due_date: string | null; }
 interface Column { id: number; title: string; position: number; }
 interface Comment { id: number; card_id: number; author: string; body: string; created_at: number; }
 
@@ -69,7 +69,7 @@ function CardDetailModal({ card, columns, sprints, epics, onClose, onSave, onEpi
   onSave: (updated: Partial<Card>) => Promise<void>;
   onEpicCreated: (epic: Epic) => void;
 }) {
-  const [form, setForm] = useState({ ...card, progress: card.progress ?? 0 });
+  const [form, setForm] = useState({ ...card, progress: card.progress ?? 0, assignees: card.assignees ?? [] });
   const [comments, setComments] = useState<Comment[]>([]);
   const [newComment, setNewComment] = useState('');
   const [commentAuthor, setCommentAuthor] = useState('Teodor');
@@ -186,21 +186,31 @@ function CardDetailModal({ card, columns, sprints, epics, onClose, onSave, onEpi
               </select>
             </div>
 
-            {/* Assignee */}
+            {/* Assignees */}
             <div>
-              <label style={{ fontSize: 10, color: 'var(--text-dim)', letterSpacing: '0.08em', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Assignee</label>
-              <select value={form.assignee ?? ''} onChange={e => setForm(f => ({ ...f, assignee: e.target.value || null }))} style={{ ...inp({ width: '100%' }) }}>
-                <option value="">Unassigned</option>
-                {ASSIGNEES.map(a => <option key={a} value={a}>{a}</option>)}
-              </select>
-              {form.assignee && (
-                <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <div style={{ width: 20, height: 20, borderRadius: '50%', background: ASSIGNEE_COLORS[form.assignee] || '#6b7280', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: '#fff' }}>
-                    {ASSIGNEE_INITIALS[form.assignee] || form.assignee[0]}
-                  </div>
-                  <span style={{ fontSize: 11, color: 'var(--text)' }}>{form.assignee}</span>
-                </div>
-              )}
+              <label style={{ fontSize: 10, color: 'var(--text-dim)', letterSpacing: '0.08em', textTransform: 'uppercase', display: 'block', marginBottom: 8 }}>Assignees</label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {ASSIGNEES.map(a => {
+                  const checked = form.assignees.includes(a);
+                  return (
+                    <label key={a} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => setForm(f => ({
+                          ...f,
+                          assignees: checked ? f.assignees.filter(x => x !== a) : [...f.assignees, a],
+                        }))}
+                        style={{ accentColor: ASSIGNEE_COLORS[a] || 'var(--accent)', width: 14, height: 14 }}
+                      />
+                      <div style={{ width: 20, height: 20, borderRadius: '50%', background: ASSIGNEE_COLORS[a] || '#6b7280', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: '#fff', flexShrink: 0 }}>
+                        {ASSIGNEE_INITIALS[a] || a[0]}
+                      </div>
+                      <span style={{ fontSize: 12, color: checked ? 'var(--text)' : 'var(--text-dim)' }}>{a}</span>
+                    </label>
+                  );
+                })}
+              </div>
             </div>
 
             {/* Hours */}
@@ -250,6 +260,60 @@ function CardDetailModal({ card, columns, sprints, epics, onClose, onSave, onEpi
   );
 }
 
+// ─── Quick Add Card ──────────────────────────────────────────────────────────
+
+function QuickAddCard({ colId, sprintId, onAdded }: { colId: number; sprintId: number; onAdded: (card: Card) => void }) {
+  const [open, setOpen] = useState(false);
+  const [title, setTitle] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  async function submit() {
+    if (!title.trim() || saving) return;
+    setSaving(true);
+    const res = await fetch('/api/cards', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ column_id: colId, title: title.trim(), sprint_id: sprintId, assignees: [] }),
+    });
+    const card = await res.json();
+    onAdded(card);
+    setTitle('');
+    setOpen(false);
+    setSaving(false);
+  }
+
+  if (!open) return (
+    <button
+      onClick={() => setOpen(true)}
+      style={{ width: '100%', background: 'none', border: '1px dashed var(--border)', borderRadius: 6, padding: '6px 10px', fontSize: 11, color: 'var(--text-dim)', cursor: 'pointer', textAlign: 'left', marginTop: 4 }}
+    >
+      + Add task
+    </button>
+  );
+
+  return (
+    <div style={{ background: 'var(--surface)', border: '1px solid var(--accent)', borderRadius: 8, padding: '8px 10px', marginTop: 4 }}>
+      <textarea
+        autoFocus
+        rows={2}
+        placeholder="Task title…"
+        value={title}
+        onChange={e => setTitle(e.target.value)}
+        onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); } if (e.key === 'Escape') { setOpen(false); setTitle(''); } }}
+        style={{ width: '100%', background: 'none', border: 'none', outline: 'none', color: 'var(--text)', fontSize: 13, fontFamily: 'var(--font-geist-mono, monospace)', resize: 'none', lineHeight: 1.4 }}
+      />
+      <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+        <button onClick={submit} disabled={!title.trim() || saving} style={{ background: 'var(--accent)', color: '#000', border: 'none', borderRadius: 4, padding: '4px 12px', fontSize: 11, fontWeight: 700, cursor: 'pointer', opacity: saving ? 0.6 : 1 }}>
+          {saving ? '…' : 'Add'}
+        </button>
+        <button onClick={() => { setOpen(false); setTitle(''); }} style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 4, padding: '4px 10px', fontSize: 11, color: 'var(--text-dim)', cursor: 'pointer' }}>
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ─── Draggable Card ─────────────────────────────────────────────────────────
 
 function DraggableCard({ card, epics, onClick }: { card: Card; epics: Epic[]; onClick: () => void }) {
@@ -284,12 +348,14 @@ function CardChip({ card, epics, onClick }: { card: Card; epics: Epic[]; onClick
       {epic && (
         <div style={{ fontSize: 10, color: epic.color, fontWeight: 700, marginBottom: 5, letterSpacing: '0.06em' }}>◆ {epic.title}</div>
       )}
-      <div style={{ fontSize: 13, color: 'var(--text)', lineHeight: 1.4, marginBottom: card.assignee ? 8 : 0 }}>{card.title}</div>
-      {card.assignee && (
-        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-          <div style={{ width: 20, height: 20, borderRadius: '50%', background: ASSIGNEE_COLORS[card.assignee] || '#6b7280', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: '#fff', flexShrink: 0 }}>
-            {ASSIGNEE_INITIALS[card.assignee] || card.assignee[0]}
-          </div>
+      <div style={{ fontSize: 13, color: 'var(--text)', lineHeight: 1.4, marginBottom: (card.assignees?.length ?? 0) > 0 ? 8 : 0 }}>{card.title}</div>
+      {(card.assignees?.length ?? 0) > 0 && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 3 }}>
+          {card.assignees.map(a => (
+            <div key={a} title={a} style={{ width: 20, height: 20, borderRadius: '50%', background: ASSIGNEE_COLORS[a] || '#6b7280', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: '#fff', flexShrink: 0 }}>
+              {ASSIGNEE_INITIALS[a] || a[0]}
+            </div>
+          ))}
         </div>
       )}
     </div>
@@ -298,11 +364,13 @@ function CardChip({ card, epics, onClick }: { card: Card; epics: Epic[]; onClick
 
 // ─── Droppable Column ────────────────────────────────────────────────────────
 
-function DroppableColumn({ col, cards, epics, onCardClick }: {
+function DroppableColumn({ col, cards, epics, onCardClick, sprintId, onCardAdded }: {
   col: Column;
   cards: Card[];
   epics: Epic[];
   onCardClick: (card: Card) => void;
+  sprintId: number;
+  onCardAdded: (card: Card) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: `col-${col.id}` });
   const label = SPRINT_COLUMN_MAP[col.title] || col.title;
@@ -348,6 +416,7 @@ function DroppableColumn({ col, cards, epics, onCardClick }: {
             onClick={() => onCardClick(card)}
           />
         ))}
+        <QuickAddCard colId={col.id} sprintId={sprintId} onAdded={onCardAdded} />
       </div>
     </div>
   );
@@ -422,8 +491,9 @@ export default function SprintsPage() {
 
   async function updateCard(updated: Partial<Card>) {
     if (!selectedCard) return;
-    setCards(cs => cs.map(c => c.id === selectedCard.id ? { ...c, ...updated } : c));
-    setSelectedCard(sc => sc ? { ...sc, ...updated } : sc);
+    const merged = { ...selectedCard, ...updated };
+    setCards(cs => cs.map(c => c.id === selectedCard.id ? merged : c));
+    setSelectedCard(merged);
     await fetch(`/api/cards/${selectedCard.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -510,6 +580,8 @@ export default function SprintsPage() {
                     cards={colCards}
                     epics={epics}
                     onCardClick={setSelectedCard}
+                    sprintId={activeSprint.id}
+                    onCardAdded={card => setCards(cs => [...cs, card])}
                   />
                 );
               })}
