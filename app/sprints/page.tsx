@@ -60,11 +60,12 @@ const inp = (extra: Record<string, unknown> = {}) => ({
 
 // ─── Card Detail Modal ──────────────────────────────────────────────────────
 
-function CardDetailModal({ card, columns, sprints, epics, onClose, onSave, onEpicCreated }: {
+function CardDetailModal({ card, columns, sprints, epics, allCards, onClose, onSave, onEpicCreated }: {
   card: Card;
   columns: Column[];
   sprints: Sprint[];
   epics: Epic[];
+  allCards: Card[];
   onClose: () => void;
   onSave: (updated: Partial<Card>) => Promise<void>;
   onEpicCreated: (epic: Epic) => void;
@@ -77,13 +78,42 @@ function CardDetailModal({ card, columns, sprints, epics, onClose, onSave, onEpi
   const [postingComment, setPostingComment] = useState(false);
   const [showNewEpic, setShowNewEpic] = useState(false);
   const [newEpic, setNewEpic] = useState({ title: '', color: '#6366f1' });
+  const [blockedBy, setBlockedBy] = useState<Card[]>([]);
+  const [blocking, setBlocking] = useState<Card[]>([]);
+  const [depSearch, setDepSearch] = useState('');
+  const [depSearchOpen, setDepSearchOpen] = useState(false);
 
   useEffect(() => {
     fetch(`/api/cards/${card.id}/comments`).then(r => r.json()).then(setComments);
+    fetch(`/api/cards/${card.id}/dependencies`).then(r => r.json()).then(d => {
+      setBlockedBy(d.blockedBy ?? []);
+      setBlocking(d.blocking ?? []);
+    });
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [card.id, onClose]);
+
+  async function addDependency(dependsOnId: number) {
+    await fetch(`/api/cards/${card.id}/dependencies`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ depends_on_id: dependsOnId }),
+    });
+    const dep = allCards.find(c => c.id === dependsOnId);
+    if (dep) setBlockedBy(bs => [...bs, dep]);
+    setDepSearch('');
+    setDepSearchOpen(false);
+  }
+
+  async function removeDependency(dependsOnId: number) {
+    await fetch(`/api/cards/${card.id}/dependencies`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ depends_on_id: dependsOnId }),
+    });
+    setBlockedBy(bs => bs.filter(b => b.id !== dependsOnId));
+  }
 
   async function handleSave() {
     setSaving(true);
@@ -158,6 +188,77 @@ function CardDetailModal({ card, columns, sprints, epics, onClose, onSave, onEpi
                 onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
                 style={{ ...inp({ width: '100%' }), resize: 'vertical' as const, lineHeight: 1.5 }}
               />
+            </div>
+
+            {/* Dependencies */}
+            <div>
+              <label style={{ fontSize: 10, color: 'var(--text-dim)', letterSpacing: '0.08em', textTransform: 'uppercase', display: 'block', marginBottom: 8 }}>Blocked by</label>
+
+              {blockedBy.length === 0 && (
+                <div style={{ fontSize: 11, color: 'var(--text-dim)', fontStyle: 'italic', marginBottom: 8 }}>No blockers</div>
+              )}
+              {blockedBy.map(dep => {
+                const depCol = columns.find(c => c.id === dep.column_id);
+                const isDone = depCol?.title === 'Done';
+                return (
+                  <div key={dep.id} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, background: 'var(--surface)', border: `1px solid ${isDone ? '#10b981' : 'var(--border)'}`, borderRadius: 6, padding: '6px 10px' }}>
+                    <span style={{ fontSize: 10, fontWeight: 700, color: isDone ? '#10b981' : '#f97316', minWidth: 40 }}>{isDone ? '✓ Done' : '⏳ Open'}</span>
+                    <span style={{ flex: 1, fontSize: 12, color: 'var(--text)', textDecoration: isDone ? 'line-through' : 'none', opacity: isDone ? 0.6 : 1 }}>{dep.title}</span>
+                    <button onClick={() => removeDependency(dep.id)} style={{ background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 14, padding: 0, lineHeight: 1 }}>✕</button>
+                  </div>
+                );
+              })}
+
+              {blocking.length > 0 && (
+                <div style={{ marginTop: 8, marginBottom: 8 }}>
+                  <div style={{ fontSize: 10, color: 'var(--text-dim)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 6 }}>Blocking</div>
+                  {blocking.map(dep => (
+                    <div key={dep.id} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, padding: '4px 0' }}>
+                      <span style={{ fontSize: 10, color: '#818cf8' }}>↳</span>
+                      <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>{dep.title}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Add blocker search */}
+              {!depSearchOpen ? (
+                <button onClick={() => setDepSearchOpen(true)} style={{ background: 'none', border: '1px dashed var(--border)', borderRadius: 6, padding: '5px 10px', fontSize: 11, color: 'var(--text-dim)', cursor: 'pointer', marginTop: 4 }}>
+                  + Add blocker
+                </button>
+              ) : (
+                <div style={{ marginTop: 6 }}>
+                  <input
+                    autoFocus
+                    placeholder="Search tasks…"
+                    value={depSearch}
+                    onChange={e => setDepSearch(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Escape') { setDepSearchOpen(false); setDepSearch(''); } }}
+                    style={{ ...inp({ width: '100%', marginBottom: 6 }) }}
+                  />
+                  <div style={{ maxHeight: 160, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 6 }}>
+                    {allCards
+                      .filter(c =>
+                        c.id !== card.id &&
+                        !blockedBy.find(b => b.id === c.id) &&
+                        (depSearch === '' || c.title.toLowerCase().includes(depSearch.toLowerCase()))
+                      )
+                      .slice(0, 10)
+                      .map(c => (
+                        <div
+                          key={c.id}
+                          onClick={() => addDependency(c.id)}
+                          style={{ padding: '8px 12px', fontSize: 12, color: 'var(--text)', cursor: 'pointer', borderBottom: '1px solid var(--border)' }}
+                          onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface)')}
+                          onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                        >
+                          {c.title}
+                        </div>
+                      ))}
+                  </div>
+                  <button onClick={() => { setDepSearchOpen(false); setDepSearch(''); }} style={{ marginTop: 6, background: 'none', border: 'none', color: 'var(--text-dim)', fontSize: 11, cursor: 'pointer', padding: 0 }}>Cancel</button>
+                </div>
+              )}
             </div>
 
             {/* Comments */}
@@ -555,6 +656,7 @@ export default function SprintsPage() {
           columns={columns}
           sprints={sprints}
           epics={epics}
+          allCards={cards}
           onClose={() => setSelectedCard(null)}
           onSave={updateCard}
           onEpicCreated={epic => setEpics(es => [...es, epic])}
