@@ -35,7 +35,6 @@
 
 html, body {
   height: 100%;
-  overflow: hidden;
 }
 
 body {
@@ -75,8 +74,7 @@ body {
 .app-layout {
   display: flex;
   flex-direction: column;
-  height: 100vh;
-  overflow: hidden;
+  min-height: 100vh;
 }
 
 /* ===== HEADER ===== */
@@ -273,17 +271,14 @@ header::before {
 /* ===== BOARD ===== */
 main {
   flex: 1;
-  overflow: hidden;
 }
 
 .board-scroll {
   display: flex;
   gap: 14px;
   padding: 20px 24px;
-  height: 100%;
-  overflow-x: auto;
-  overflow-y: hidden;
   align-items: flex-start;
+  overflow-x: auto;
 }
 
 /* ===== COLUMNS ===== */
@@ -292,7 +287,6 @@ main {
   flex-direction: column;
   min-width: 292px;
   max-width: 292px;
-  height: 100%;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
@@ -364,8 +358,6 @@ main {
 }
 
 .column-cards {
-  flex: 1;
-  overflow-y: auto;
   overflow-x: hidden;
   padding: 10px;
   display: flex;
