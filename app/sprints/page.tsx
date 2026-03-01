@@ -513,7 +513,7 @@ export default function SprintsPage() {
           {activeSprint ? (
             <>
               <span style={{ fontFamily: 'var(--font-syne)', fontWeight: 700, fontSize: 14, color: 'var(--text)' }}>{activeSprint.name}</span>
-              <span style={{ fontSize: 11, color: 'var(--text-dim)', background: 'rgba(99,102,241,0.12)', color: '#818cf8', padding: '2px 8px', borderRadius: 4, fontWeight: 700 }}>ACTIVE</span>
+              <span style={{ fontSize: 11, background: 'rgba(99,102,241,0.12)', color: '#818cf8', padding: '2px 8px', borderRadius: 4, fontWeight: 700 }}>ACTIVE</span>
               <span style={{ fontSize: 11, color: 'var(--text-dim)', marginLeft: 4 }}>{formatDate(activeSprint.start_date)} – {formatDate(activeSprint.end_date)}</span>
               <span style={{ fontSize: 11, color: 'var(--text-dim)', marginLeft: 'auto' }}>
                 {doneColId ? sprintCards.filter(c => c.column_id === doneColId).length : 0}/{sprintCards.length} done
