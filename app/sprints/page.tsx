@@ -135,7 +135,12 @@ function CardDetailModal({ card, columns, sprints, epics, onClose, onSave, onEpi
             {currentEpic && (
               <div style={{ fontSize: 10, color: currentEpic.color, fontWeight: 700, marginBottom: 6, letterSpacing: '0.08em' }}>◆ {currentEpic.title}</div>
             )}
-            <div style={{ fontSize: 15, color: 'var(--text)', fontWeight: 600, lineHeight: 1.4 }}>{card.title}</div>
+            <textarea
+              value={form.title}
+              onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
+              rows={2}
+              style={{ width: '100%', background: 'none', border: 'none', outline: 'none', resize: 'none', fontSize: 15, color: 'var(--text)', fontWeight: 600, lineHeight: 1.4, fontFamily: 'var(--font-geist-mono, monospace)', padding: 0 }}
+            />
           </div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 18, padding: 4, lineHeight: 1 }}>✕</button>
         </div>
