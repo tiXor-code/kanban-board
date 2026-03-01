@@ -162,9 +162,10 @@ function CardDetailModal({ card, columns, sprints, epics, allCards, onClose, onS
         {/* Header */}
         <div style={{ padding: '18px 24px 14px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
           <div style={{ flex: 1 }}>
-            {currentEpic && (
-              <div style={{ fontSize: 10, color: currentEpic.color, fontWeight: 700, marginBottom: 6, letterSpacing: '0.08em' }}>◆ {currentEpic.title}</div>
-            )}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+              {currentEpic && <span style={{ fontSize: 10, color: currentEpic.color, fontWeight: 700, letterSpacing: '0.08em' }}>◆ {currentEpic.title}</span>}
+              <span style={{ fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--font-geist-mono, monospace)' }}>#{card.id}</span>
+            </div>
             <textarea
               value={form.title}
               onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
@@ -463,9 +464,10 @@ function CardChip({ card, epics, onClick }: { card: Card; epics: Epic[]; onClick
         userSelect: 'none',
       }}
     >
-      {epic && (
-        <div style={{ fontSize: 10, color: epic.color, fontWeight: 700, marginBottom: 5, letterSpacing: '0.06em' }}>◆ {epic.title}</div>
-      )}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5 }}>
+        {epic && <span style={{ fontSize: 10, color: epic.color, fontWeight: 700, letterSpacing: '0.06em' }}>◆ {epic.title}</span>}
+        <span style={{ fontSize: 10, color: 'var(--text-dim)', marginLeft: epic ? 0 : 'auto', fontFamily: 'var(--font-geist-mono, monospace)' }}>#{card.id}</span>
+      </div>
       <div style={{ fontSize: 13, color: 'var(--text)', lineHeight: 1.4, marginBottom: (card.assignees?.length ?? 0) > 0 ? 8 : 0 }}>{card.title}</div>
       {(card.assignees?.length ?? 0) > 0 && (
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 3 }}>
