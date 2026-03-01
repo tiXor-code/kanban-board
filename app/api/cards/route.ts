@@ -1,6 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 
+export async function GET() {
+  try {
+    const result = await db.execute('SELECT * FROM cards ORDER BY column_id, position');
+    const cards = result.rows.map(r => ({
+      ...r,
+      labels: (() => { try { return JSON.parse(r.labels as string); } catch { return []; } })(),
+    }));
+    return NextResponse.json(cards);
+  } catch (err) {
+    console.error('GET /api/cards error:', err);
+    return NextResponse.json({ error: 'Failed to fetch cards' }, { status: 500 });
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();

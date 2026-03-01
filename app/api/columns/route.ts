@@ -1,6 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 
+export async function GET() {
+  try {
+    const result = await db.execute('SELECT * FROM columns ORDER BY position');
+    return NextResponse.json(result.rows);
+  } catch (err) {
+    console.error('GET /api/columns error:', err);
+    return NextResponse.json({ error: 'Failed to fetch columns' }, { status: 500 });
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const { title, color = '#6366f1' } = await req.json();

@@ -7,6 +7,7 @@ export default function NavTabs() {
   const path = usePathname();
   const isBoard = path === "/" || path === "";
   const isCouncil = path.startsWith("/council");
+  const isSprint = path.startsWith("/sprints");
 
   const tab = (
     href: string,
@@ -69,6 +70,7 @@ export default function NavTabs() {
       }}
     >
       {tab("/", "Board", isBoard, "⬛")}
+      {tab("/sprints", "Sprint", isSprint, "⚡")}
       {tab("/council", "The Council", isCouncil, "⬡")}
     </nav>
   );
