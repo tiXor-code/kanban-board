@@ -5,15 +5,15 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   try {
     const { id } = await params;
     const body = await req.json();
-    const { title, description = '', labels = [], due_date = null, hours = 0, assignee = null, priority = null, sprint_id = null } = body;
+    const { title, description = '', labels = [], due_date = null, hours = 0, assignee = null, priority = null, sprint_id = null, progress = 0, epic_id = null } = body;
 
     if (!title) return NextResponse.json({ error: 'Title required' }, { status: 400 });
 
     const now = Date.now() / 1000;
     const result = await db.execute({
-      sql: `UPDATE cards SET title=?, description=?, labels=?, due_date=?, hours=?, assignee=?, priority=?, sprint_id=?, updated_at=?
+      sql: `UPDATE cards SET title=?, description=?, labels=?, due_date=?, hours=?, assignee=?, priority=?, sprint_id=?, progress=?, epic_id=?, updated_at=?
             WHERE id=? RETURNING *`,
-      args: [title, description, JSON.stringify(labels), due_date, hours, assignee, priority, sprint_id, now, parseInt(id)],
+      args: [title, description, JSON.stringify(labels), due_date, hours, assignee, priority, sprint_id, progress ?? 0, epic_id ?? null, now, parseInt(id)],
     });
 
     if (result.rows.length === 0) {
