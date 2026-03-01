@@ -143,19 +143,6 @@ function CardDetailModal({ card, columns, sprints, epics, onClose, onSave, onEpi
         <div style={{ padding: 24, display: 'flex', gap: 24 }}>
           {/* Left: progress, comments */}
           <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 18 }}>
-            {/* Progress */}
-            <div>
-              <label style={{ fontSize: 10, color: 'var(--text-dim)', letterSpacing: '0.08em', textTransform: 'uppercase', display: 'block', marginBottom: 8 }}>Progress — {form.progress}%</label>
-              <input
-                type="range" min={0} max={100} value={form.progress}
-                onChange={e => setForm(f => ({ ...f, progress: +e.target.value }))}
-                style={{ width: '100%', accentColor: 'var(--accent)' }}
-              />
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--text-dim)', marginTop: 2 }}>
-                <span>0%</span><span>100%</span>
-              </div>
-            </div>
-
             {/* Comments */}
             <div>
               <label style={{ fontSize: 10, color: 'var(--text-dim)', letterSpacing: '0.08em', textTransform: 'uppercase', display: 'block', marginBottom: 8 }}>Comments</label>
@@ -214,15 +201,6 @@ function CardDetailModal({ card, columns, sprints, epics, onClose, onSave, onEpi
                   <span style={{ fontSize: 11, color: 'var(--text)' }}>{form.assignee}</span>
                 </div>
               )}
-            </div>
-
-            {/* Priority */}
-            <div>
-              <label style={{ fontSize: 10, color: 'var(--text-dim)', letterSpacing: '0.08em', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Priority</label>
-              <select value={form.priority ?? ''} onChange={e => setForm(f => ({ ...f, priority: e.target.value || null }))} style={{ ...inp({ width: '100%' }) }}>
-                <option value="">None</option>
-                {Object.keys(PRIORITY_COLORS).map(p => <option key={p} value={p}>{p}</option>)}
-              </select>
             </div>
 
             {/* Hours */}
@@ -306,19 +284,14 @@ function CardChip({ card, epics, onClick }: { card: Card; epics: Epic[]; onClick
       {epic && (
         <div style={{ fontSize: 10, color: epic.color, fontWeight: 700, marginBottom: 5, letterSpacing: '0.06em' }}>◆ {epic.title}</div>
       )}
-      <div style={{ fontSize: 13, color: 'var(--text)', lineHeight: 1.4, marginBottom: 8 }}>{card.title}</div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
-        {card.priority && (
-          <span style={{ fontSize: 10, fontWeight: 600, color: PRIORITY_COLORS[card.priority] || '#6b7280', background: `${PRIORITY_COLORS[card.priority] || '#6b7280'}18`, padding: '1px 6px', borderRadius: 4 }}>
-            {card.priority}
-          </span>
-        )}
-        {card.assignee && (
-          <div style={{ marginLeft: 'auto', width: 20, height: 20, borderRadius: '50%', background: ASSIGNEE_COLORS[card.assignee] || '#6b7280', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: '#fff', flexShrink: 0 }}>
+      <div style={{ fontSize: 13, color: 'var(--text)', lineHeight: 1.4, marginBottom: card.assignee ? 8 : 0 }}>{card.title}</div>
+      {card.assignee && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+          <div style={{ width: 20, height: 20, borderRadius: '50%', background: ASSIGNEE_COLORS[card.assignee] || '#6b7280', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: '#fff', flexShrink: 0 }}>
             {ASSIGNEE_INITIALS[card.assignee] || card.assignee[0]}
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
