@@ -688,41 +688,45 @@ export default function SprintsPage() {
       <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', background: 'var(--bg)', fontFamily: 'var(--font-geist-mono, monospace)' }}>
 
         {/* Top bar */}
-        <div style={{ flexShrink: 0, padding: '16px 24px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 16 }}>
-          <Link href="/" style={{ color: 'var(--text-dim)', textDecoration: 'none', fontSize: 12, letterSpacing: '0.08em', display: 'flex', alignItems: 'center', gap: 6 }}>
-            ← Board
-          </Link>
-          <span style={{ color: 'var(--border)' }}>|</span>
-          {activeSprint ? (
-            <>
-              <span style={{ fontFamily: 'var(--font-syne)', fontWeight: 700, fontSize: 14, color: 'var(--text)' }}>{activeSprint.name}</span>
-              <span style={{ fontSize: 11, background: 'rgba(99,102,241,0.12)', color: '#818cf8', padding: '2px 8px', borderRadius: 4, fontWeight: 700 }}>ACTIVE</span>
-              <span style={{ fontSize: 11, color: 'var(--text-dim)', marginLeft: 4 }}>{formatDate(activeSprint.start_date)} – {formatDate(activeSprint.end_date)}</span>
+        <div style={{ flexShrink: 0, padding: '12px 24px', borderBottom: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {/* Row 1: sprint info */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <Link href="/" style={{ color: 'var(--text-dim)', textDecoration: 'none', fontSize: 12, letterSpacing: '0.08em', display: 'flex', alignItems: 'center', gap: 6 }}>
+              ← Board
+            </Link>
+            <span style={{ color: 'var(--border)' }}>|</span>
+            {activeSprint ? (
+              <>
+                <span style={{ fontFamily: 'var(--font-syne)', fontWeight: 700, fontSize: 14, color: 'var(--text)' }}>{activeSprint.name}</span>
+                <span style={{ fontSize: 11, background: 'rgba(99,102,241,0.12)', color: '#818cf8', padding: '2px 8px', borderRadius: 4, fontWeight: 700 }}>ACTIVE</span>
+                <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>{formatDate(activeSprint.start_date)} – {formatDate(activeSprint.end_date)}</span>
+                <span style={{ fontSize: 11, color: 'var(--text-dim)', marginLeft: 'auto' }}>
+                  {doneColId ? allSprintCards.filter(c => c.column_id === doneColId).length : 0}/{allSprintCards.length} done
+                </span>
+              </>
+            ) : (
+              <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>No active sprint</span>
+            )}
+          </div>
 
-              {/* Assignee filter pills */}
-              <div style={{ display: 'flex', gap: 5, marginLeft: 16 }}>
-                {['All', ...ASSIGNEES].map(a => (
-                  <button
-                    key={a}
-                    onClick={() => setAssigneeFilter(a)}
-                    style={{
-                      background: assigneeFilter === a ? (ASSIGNEE_COLORS[a] || '#6366f1') : 'var(--surface)',
-                      color: assigneeFilter === a ? '#fff' : 'var(--text-dim)',
-                      border: `1px solid ${assigneeFilter === a ? (ASSIGNEE_COLORS[a] || '#6366f1') : 'var(--border)'}`,
-                      borderRadius: 20, padding: '3px 10px', fontSize: 11, fontWeight: 600, cursor: 'pointer',
-                    }}
-                  >
-                    {a === 'All' ? 'All' : a}
-                  </button>
-                ))}
-              </div>
-
-              <span style={{ fontSize: 11, color: 'var(--text-dim)', marginLeft: 'auto' }}>
-                {doneColId ? allSprintCards.filter(c => c.column_id === doneColId).length : 0}/{allSprintCards.length} done
-              </span>
-            </>
-          ) : (
-            <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>No active sprint</span>
+          {/* Row 2: assignee filter pills */}
+          {activeSprint && (
+            <div style={{ display: 'flex', gap: 5 }}>
+              {['All', ...ASSIGNEES].map(a => (
+                <button
+                  key={a}
+                  onClick={() => setAssigneeFilter(a)}
+                  style={{
+                    background: assigneeFilter === a ? (ASSIGNEE_COLORS[a] || '#6366f1') : 'var(--surface)',
+                    color: assigneeFilter === a ? '#fff' : 'var(--text-dim)',
+                    border: `1px solid ${assigneeFilter === a ? (ASSIGNEE_COLORS[a] || '#6366f1') : 'var(--border)'}`,
+                    borderRadius: 20, padding: '3px 12px', fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                  }}
+                >
+                  {a}
+                </button>
+              ))}
+            </div>
           )}
         </div>
 
