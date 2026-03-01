@@ -455,7 +455,7 @@ export default function SprintsPage() {
   useEffect(() => { load(); }, [load]);
 
   const activeSprint = sprints.find(s => s.status === 'active');
-  const sprintCards = activeSprint ? cards.filter(c => c.sprint_id === activeSprint.id) : [];
+  const sprintCards = activeSprint ? cards.filter(c => Number(c.sprint_id) === Number(activeSprint.id)) : [];
   const doneColId = columns.find(c => c.title === 'Done')?.id ?? null;
 
   // Drag handlers
