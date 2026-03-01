@@ -148,6 +148,18 @@ function CardDetailModal({ card, columns, sprints, epics, onClose, onSave, onEpi
         <div style={{ padding: 24, display: 'flex', gap: 24 }}>
           {/* Left: progress, comments */}
           <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 18 }}>
+            {/* Description */}
+            <div>
+              <label style={{ fontSize: 10, color: 'var(--text-dim)', letterSpacing: '0.08em', textTransform: 'uppercase', display: 'block', marginBottom: 8 }}>Description</label>
+              <textarea
+                rows={4}
+                placeholder="Add a description…"
+                value={form.description ?? ''}
+                onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
+                style={{ ...inp({ width: '100%' }), resize: 'vertical' as const, lineHeight: 1.5 }}
+              />
+            </div>
+
             {/* Comments */}
             <div>
               <label style={{ fontSize: 10, color: 'var(--text-dim)', letterSpacing: '0.08em', textTransform: 'uppercase', display: 'block', marginBottom: 8 }}>Comments</label>
