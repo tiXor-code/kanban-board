@@ -484,13 +484,14 @@ function CardChip({ card, epics, onClick }: { card: Card; epics: Epic[]; onClick
 
 // ─── Droppable Column ────────────────────────────────────────────────────────
 
-function DroppableColumn({ col, cards, epics, onCardClick, sprintId, onCardAdded }: {
+function DroppableColumn({ col, cards, epics, onCardClick, sprintId, onCardAdded, showAdd }: {
   col: Column;
   cards: Card[];
   epics: Epic[];
   onCardClick: (card: Card) => void;
   sprintId: number;
   onCardAdded: (card: Card) => void;
+  showAdd: boolean;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: `col-${col.id}` });
   const label = SPRINT_COLUMN_MAP[col.title] || col.title;
@@ -536,7 +537,7 @@ function DroppableColumn({ col, cards, epics, onCardClick, sprintId, onCardAdded
             onClick={() => onCardClick(card)}
           />
         ))}
-        <QuickAddCard colId={col.id} sprintId={sprintId} onAdded={onCardAdded} />
+        {showAdd && <QuickAddCard colId={col.id} sprintId={sprintId} onAdded={onCardAdded} />}
       </div>
     </div>
   );
@@ -554,6 +555,7 @@ export default function SprintsPage() {
   const [showNewSprint, setShowNewSprint] = useState(false);
   const [newSprint, setNewSprint] = useState({ name: '', start_date: '', end_date: '' });
   const [saving, setSaving] = useState(false);
+  const [assigneeFilter, setAssigneeFilter] = useState<string>('All');
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
@@ -574,9 +576,26 @@ export default function SprintsPage() {
 
   useEffect(() => { load(); }, [load]);
 
+  // Real-time polling every 5s (only cards — lightweight)
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      if (document.hidden) return; // skip if tab not visible
+      const res = await fetch('/api/cards');
+      const data = await res.json();
+      setCards(data);
+      // Keep selected card in sync
+      setSelectedCard(sc => sc ? (data.find((c: Card) => c.id === sc.id) ?? sc) : null);
+    }, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
   const activeSprint = sprints.find(s => s.status === 'active');
-  const sprintCards = activeSprint ? cards.filter(c => Number(c.sprint_id) === Number(activeSprint.id)) : [];
+  const allSprintCards = activeSprint ? cards.filter(c => Number(c.sprint_id) === Number(activeSprint.id)) : [];
+  const sprintCards = assigneeFilter === 'All'
+    ? allSprintCards
+    : allSprintCards.filter(c => (c.assignees ?? []).includes(assigneeFilter));
   const doneColId = columns.find(c => c.title === 'Done')?.id ?? null;
+  const todoColId = columns.find(c => c.title === 'Backlog')?.id ?? null;
 
   // Drag handlers
   function handleDragStart(event: DragStartEvent) {
@@ -679,8 +698,27 @@ export default function SprintsPage() {
               <span style={{ fontFamily: 'var(--font-syne)', fontWeight: 700, fontSize: 14, color: 'var(--text)' }}>{activeSprint.name}</span>
               <span style={{ fontSize: 11, background: 'rgba(99,102,241,0.12)', color: '#818cf8', padding: '2px 8px', borderRadius: 4, fontWeight: 700 }}>ACTIVE</span>
               <span style={{ fontSize: 11, color: 'var(--text-dim)', marginLeft: 4 }}>{formatDate(activeSprint.start_date)} – {formatDate(activeSprint.end_date)}</span>
+
+              {/* Assignee filter pills */}
+              <div style={{ display: 'flex', gap: 5, marginLeft: 16 }}>
+                {['All', ...ASSIGNEES].map(a => (
+                  <button
+                    key={a}
+                    onClick={() => setAssigneeFilter(a)}
+                    style={{
+                      background: assigneeFilter === a ? (ASSIGNEE_COLORS[a] || '#6366f1') : 'var(--surface)',
+                      color: assigneeFilter === a ? '#fff' : 'var(--text-dim)',
+                      border: `1px solid ${assigneeFilter === a ? (ASSIGNEE_COLORS[a] || '#6366f1') : 'var(--border)'}`,
+                      borderRadius: 20, padding: '3px 10px', fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                    }}
+                  >
+                    {a === 'All' ? 'All' : a}
+                  </button>
+                ))}
+              </div>
+
               <span style={{ fontSize: 11, color: 'var(--text-dim)', marginLeft: 'auto' }}>
-                {doneColId ? sprintCards.filter(c => c.column_id === doneColId).length : 0}/{sprintCards.length} done
+                {doneColId ? allSprintCards.filter(c => c.column_id === doneColId).length : 0}/{allSprintCards.length} done
               </span>
             </>
           ) : (
@@ -703,6 +741,7 @@ export default function SprintsPage() {
                     onCardClick={setSelectedCard}
                     sprintId={activeSprint.id}
                     onCardAdded={card => setCards(cs => [...cs, card])}
+                    showAdd={col.id === todoColId}
                   />
                 );
               })}
