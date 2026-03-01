@@ -497,7 +497,7 @@ function DroppableColumn({ col, cards, epics, onCardClick, sprintId, onCardAdded
   const label = SPRINT_COLUMN_MAP[col.title] || col.title;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', flex: '1 1 0', minWidth: 200, maxWidth: 340, height: '100%' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', flex: '1 1 0', minWidth: 200, maxWidth: 340 }}>
       {/* Column header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, flexShrink: 0 }}>
         <span style={{ fontFamily: 'var(--font-syne)', fontWeight: 700, fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-dim)' }}>
@@ -512,8 +512,6 @@ function DroppableColumn({ col, cards, epics, onCardClick, sprintId, onCardAdded
       <div
         ref={setNodeRef}
         style={{
-          flex: 1,
-          overflowY: 'auto',
           display: 'flex',
           flexDirection: 'column',
           gap: 8,
@@ -685,10 +683,10 @@ export default function SprintsPage() {
       )}
 
       {/* Full-height Jira-style layout */}
-      <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', background: 'var(--bg)', fontFamily: 'var(--font-geist-mono, monospace)' }}>
+      <div style={{ minHeight: '100vh', background: 'var(--bg)', fontFamily: 'var(--font-geist-mono, monospace)' }}>
 
         {/* Top bar */}
-        <div style={{ flexShrink: 0, padding: '12px 24px', borderBottom: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ position: 'sticky', top: 0, zIndex: 10, padding: '12px 24px', borderBottom: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 10, background: 'var(--bg)' }}>
           {/* Row 1: sprint info */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <Link href="/" style={{ color: 'var(--text-dim)', textDecoration: 'none', fontSize: 12, letterSpacing: '0.08em', display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -733,7 +731,7 @@ export default function SprintsPage() {
         {/* Board area */}
         {activeSprint ? (
           <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-            <div style={{ flex: 1, display: 'flex', gap: 16, padding: '20px 24px', overflow: 'hidden', minHeight: 0 }}>
+            <div style={{ display: 'flex', gap: 16, padding: '20px 24px', alignItems: 'flex-start' }}>
               {columns.map(col => {
                 const colCards = sprintCards.filter(c => c.column_id === col.id);
                 return (
@@ -764,7 +762,7 @@ export default function SprintsPage() {
         )}
 
         {/* Sprints list footer - collapsible */}
-        <div style={{ flexShrink: 0, borderTop: '1px solid var(--border)', padding: '16px 24px', maxHeight: 220, overflowY: 'auto' }}>
+        <div style={{ borderTop: '1px solid var(--border)', padding: '16px 24px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
             <span style={{ fontFamily: 'var(--font-syne)', fontWeight: 700, fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-dim)' }}>All Sprints</span>
             <button onClick={() => setShowNewSprint(!showNewSprint)} style={{ background: 'var(--accent-dim)', color: 'var(--accent)', border: '1px solid var(--accent-dim)', borderRadius: 6, padding: '4px 12px', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', cursor: 'pointer', fontFamily: 'var(--font-syne)', textTransform: 'uppercase' }}>
