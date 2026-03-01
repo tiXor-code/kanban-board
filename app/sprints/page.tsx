@@ -2,6 +2,17 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
+import {
+  DndContext,
+  DragOverlay,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  useDroppable,
+  useDraggable,
+  DragEndEvent,
+  DragStartEvent,
+} from '@dnd-kit/core';
 
 interface Sprint { id: number; name: string; start_date: string | null; end_date: string | null; status: string; }
 interface Epic { id: number; title: string; color: string; description: string; }
@@ -11,7 +22,16 @@ interface Comment { id: number; card_id: number; author: string; body: string; c
 
 const PRIORITY_COLORS: Record<string, string> = { Must: '#ef4444', Should: '#f97316', Could: '#eab308', Wont: '#6b7280' };
 const ASSIGNEE_COLORS: Record<string, string> = { Teodor: '#6366f1', Eduard: '#10b981', John: '#f59e0b', Mozi: '#ec4899' };
+const ASSIGNEE_INITIALS: Record<string, string> = { Teodor: 'T', Eduard: 'E', John: 'J', Mozi: 'M' };
 const ASSIGNEES = ['Teodor', 'Eduard', 'John', 'Mozi'];
+
+// Sprint-only columns (map DB column names to sprint labels)
+const SPRINT_COLUMN_MAP: Record<string, string> = {
+  'Backlog': 'To-do',
+  'In Progress': 'In Progress',
+  'Review': 'Review',
+  'Done': 'Done',
+};
 
 function formatDate(d: string | null) {
   if (!d) return '—';
@@ -26,15 +46,28 @@ function timeAgo(ts: number) {
   return `${Math.floor(diff / 86400)}d ago`;
 }
 
-// ─── Card Detail Modal ─────────────────────────────────────────────────────────
+const inp = (extra: Record<string, unknown> = {}) => ({
+  background: 'var(--bg)',
+  border: '1px solid var(--border)',
+  borderRadius: 6,
+  color: 'var(--text)',
+  fontSize: 12,
+  padding: '6px 10px',
+  outline: 'none',
+  fontFamily: 'var(--font-geist-mono, monospace)',
+  ...extra,
+});
 
-function CardDetailModal({ card, columns, sprints, epics, onClose, onSave }: {
+// ─── Card Detail Modal ──────────────────────────────────────────────────────
+
+function CardDetailModal({ card, columns, sprints, epics, onClose, onSave, onEpicCreated }: {
   card: Card;
   columns: Column[];
   sprints: Sprint[];
   epics: Epic[];
   onClose: () => void;
   onSave: (updated: Partial<Card>) => Promise<void>;
+  onEpicCreated: (epic: Epic) => void;
 }) {
   const [form, setForm] = useState({ ...card, progress: card.progress ?? 0 });
   const [comments, setComments] = useState<Comment[]>([]);
@@ -78,221 +111,158 @@ function CardDetailModal({ card, columns, sprints, epics, onClose, onSave }: {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(newEpic),
     });
-    const epic = await res.json();
-    setForm(f => ({ ...f, epic_id: epic.id }));
+    const created: Epic = await res.json();
+    onEpicCreated(created);
+    setForm(f => ({ ...f, epic_id: created.id }));
     setShowNewEpic(false);
     setNewEpic({ title: '', color: '#6366f1' });
   }
 
   const currentEpic = epics.find(e => e.id === form.epic_id);
-  const colName = columns.find(c => c.id === card.column_id)?.title || '—';
-
-  const inp = (style?: object) => ({
-    background: 'var(--bg)',
-    border: '1px solid var(--border)',
-    borderRadius: 6,
-    padding: '7px 10px',
-    color: 'var(--text)',
-    fontSize: 13,
-    outline: 'none',
-    width: '100%',
-    boxSizing: 'border-box' as const,
-    fontFamily: 'inherit',
-    ...style,
-  });
-
-  const label = (text: string) => (
-    <label style={{ fontSize: 10, color: 'var(--text-dim)', letterSpacing: '0.08em', textTransform: 'uppercase' as const, display: 'block', marginBottom: 5, fontFamily: 'var(--font-syne)' }}>
-      {text}
-    </label>
-  );
 
   return (
     <div
-      onClick={e => e.target === e.currentTarget && onClose()}
+      onClick={onClose}
       style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 1000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', overflowY: 'auto', padding: '40px 16px' }}
     >
-      <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, width: '100%', maxWidth: 680, position: 'relative' }}>
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 12, width: '100%', maxWidth: 680, boxShadow: '0 24px 64px rgba(0,0,0,0.5)', marginBottom: 40 }}
+      >
         {/* Header */}
-        <div style={{ padding: '20px 24px 0', borderBottom: '1px solid var(--border)', paddingBottom: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-            <span style={{ fontSize: 10, color: 'var(--text-dim)', background: 'var(--bg)', padding: '2px 8px', borderRadius: 4, border: '1px solid var(--border)' }}>{colName}</span>
+        <div style={{ padding: '18px 24px 14px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+          <div style={{ flex: 1 }}>
             {currentEpic && (
-              <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 4, background: `${currentEpic.color}22`, color: currentEpic.color }}>
-                ◆ {currentEpic.title}
-              </span>
+              <div style={{ fontSize: 10, color: currentEpic.color, fontWeight: 700, marginBottom: 6, letterSpacing: '0.08em' }}>◆ {currentEpic.title}</div>
             )}
+            <div style={{ fontSize: 15, color: 'var(--text)', fontWeight: 600, lineHeight: 1.4 }}>{card.title}</div>
           </div>
-          <input
-            value={form.title}
-            onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
-            style={{ ...inp(), fontSize: 17, fontWeight: 700, background: 'transparent', border: 'none', padding: '0', letterSpacing: '-0.01em', color: 'var(--text)' }}
-          />
-          <button onClick={onClose} style={{ position: 'absolute', top: 16, right: 16, background: 'transparent', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 18, lineHeight: 1 }}>×</button>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 18, padding: 4, lineHeight: 1 }}>✕</button>
         </div>
 
         <div style={{ padding: 24, display: 'flex', gap: 24 }}>
-          {/* Left: main content */}
+          {/* Left: progress, comments */}
           <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 18 }}>
-
-            {/* Description */}
-            <div>
-              {label('Description')}
-              <textarea
-                value={form.description}
-                onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-                rows={4}
-                placeholder="Add a description..."
-                style={{ ...inp(), resize: 'vertical' as const, lineHeight: 1.6 }}
-              />
-            </div>
-
             {/* Progress */}
             <div>
-              {label(`Progress — ${form.progress ?? 0}%`)}
+              <label style={{ fontSize: 10, color: 'var(--text-dim)', letterSpacing: '0.08em', textTransform: 'uppercase', display: 'block', marginBottom: 8 }}>Progress — {form.progress}%</label>
               <input
-                type="range" min={0} max={100} step={5}
-                value={form.progress ?? 0}
-                onChange={e => setForm(f => ({ ...f, progress: parseInt(e.target.value) }))}
+                type="range" min={0} max={100} value={form.progress}
+                onChange={e => setForm(f => ({ ...f, progress: +e.target.value }))}
                 style={{ width: '100%', accentColor: 'var(--accent)' }}
               />
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--text-dim)', marginTop: 2 }}>
-                <span>0%</span><span>50%</span><span>100%</span>
-              </div>
-              <div style={{ height: 6, background: 'var(--border)', borderRadius: 3, marginTop: 6, overflow: 'hidden' }}>
-                <div style={{ width: `${form.progress ?? 0}%`, height: '100%', background: (form.progress ?? 0) === 100 ? '#10b981' : 'var(--accent)', borderRadius: 3, transition: 'width 0.2s' }} />
+                <span>0%</span><span>100%</span>
               </div>
             </div>
 
             {/* Comments */}
             <div>
-              {label('Comments')}
+              <label style={{ fontSize: 10, color: 'var(--text-dim)', letterSpacing: '0.08em', textTransform: 'uppercase', display: 'block', marginBottom: 8 }}>Comments</label>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
                 {comments.length === 0 && (
-                  <div style={{ fontSize: 12, color: 'var(--text-dim)', padding: '8px 0' }}>No comments yet.</div>
+                  <div style={{ fontSize: 11, color: 'var(--text-dim)', fontStyle: 'italic' }}>No comments yet</div>
                 )}
                 {comments.map(c => (
-                  <div key={c.id} style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, padding: '10px 12px' }}>
+                  <div key={c.id} style={{ background: 'var(--surface)', borderRadius: 8, padding: '8px 12px', border: '1px solid var(--border)' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
-                      <span style={{ fontSize: 11, fontWeight: 700, color: ASSIGNEE_COLORS[c.author] || 'var(--accent)' }}>{c.author}</span>
+                      <span style={{ fontSize: 11, fontWeight: 600, color: ASSIGNEE_COLORS[c.author] || 'var(--accent)' }}>{c.author}</span>
                       <span style={{ fontSize: 10, color: 'var(--text-dim)' }}>{timeAgo(c.created_at)}</span>
                     </div>
-                    <p style={{ margin: 0, fontSize: 13, color: 'var(--text)', lineHeight: 1.5 }}>{c.body}</p>
+                    <div style={{ fontSize: 12, color: 'var(--text)', lineHeight: 1.5 }}>{c.body}</div>
                   </div>
                 ))}
               </div>
               <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
                 <select value={commentAuthor} onChange={e => setCommentAuthor(e.target.value)} style={{ ...inp({ width: 'auto', flex: '0 0 auto' }) }}>
-                  {ASSIGNEES.map(a => <option key={a}>{a}</option>)}
+                  {ASSIGNEES.map(a => <option key={a} value={a}>{a}</option>)}
                 </select>
                 <textarea
-                  value={newComment}
+                  rows={2} placeholder="Add a comment…" value={newComment}
                   onChange={e => setNewComment(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) postComment(); }}
-                  rows={2}
-                  placeholder="Write a comment... (Ctrl+Enter to post)"
                   style={{ ...inp({ flex: 1 }), resize: 'none' as const }}
                 />
-                <button
-                  onClick={postComment}
-                  disabled={postingComment || !newComment.trim()}
-                  style={{ background: 'var(--accent)', color: '#000', border: 'none', borderRadius: 6, padding: '7px 14px', fontSize: 11, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' as const, opacity: postingComment ? 0.6 : 1 }}
-                >
+                <button onClick={postComment} disabled={postingComment || !newComment.trim()} style={{ background: 'var(--accent)', color: '#000', border: 'none', borderRadius: 6, padding: '6px 14px', fontSize: 11, fontWeight: 700, cursor: 'pointer', letterSpacing: '0.08em', opacity: postingComment ? 0.6 : 1 }}>
                   Post
                 </button>
               </div>
             </div>
           </div>
 
-          {/* Right: sidebar fields */}
+          {/* Right: metadata */}
           <div style={{ width: 180, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 14 }}>
+            {/* Status */}
+            <div>
+              <label style={{ fontSize: 10, color: 'var(--text-dim)', letterSpacing: '0.08em', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Status</label>
+              <select value={form.column_id} onChange={e => setForm(f => ({ ...f, column_id: +e.target.value }))} style={{ ...inp({ width: '100%' }) }}>
+                {columns.map(c => <option key={c.id} value={c.id}>{SPRINT_COLUMN_MAP[c.title] || c.title}</option>)}
+              </select>
+            </div>
 
             {/* Assignee */}
             <div>
-              {label('Assignee')}
-              <select value={form.assignee || ''} onChange={e => setForm(f => ({ ...f, assignee: e.target.value || null }))} style={inp()}>
+              <label style={{ fontSize: 10, color: 'var(--text-dim)', letterSpacing: '0.08em', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Assignee</label>
+              <select value={form.assignee ?? ''} onChange={e => setForm(f => ({ ...f, assignee: e.target.value || null }))} style={{ ...inp({ width: '100%' }) }}>
                 <option value="">Unassigned</option>
-                {ASSIGNEES.map(a => <option key={a}>{a}</option>)}
+                {ASSIGNEES.map(a => <option key={a} value={a}>{a}</option>)}
               </select>
               {form.assignee && (
                 <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <div style={{ width: 10, height: 10, borderRadius: '50%', background: ASSIGNEE_COLORS[form.assignee] || '#888' }} />
-                  <span style={{ fontSize: 11, color: ASSIGNEE_COLORS[form.assignee] || 'var(--text)' }}>{form.assignee}</span>
+                  <div style={{ width: 20, height: 20, borderRadius: '50%', background: ASSIGNEE_COLORS[form.assignee] || '#6b7280', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: '#fff' }}>
+                    {ASSIGNEE_INITIALS[form.assignee] || form.assignee[0]}
+                  </div>
+                  <span style={{ fontSize: 11, color: 'var(--text)' }}>{form.assignee}</span>
                 </div>
               )}
             </div>
 
             {/* Priority */}
             <div>
-              {label('Priority')}
-              <select value={form.priority || ''} onChange={e => setForm(f => ({ ...f, priority: e.target.value || null }))} style={inp()}>
+              <label style={{ fontSize: 10, color: 'var(--text-dim)', letterSpacing: '0.08em', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Priority</label>
+              <select value={form.priority ?? ''} onChange={e => setForm(f => ({ ...f, priority: e.target.value || null }))} style={{ ...inp({ width: '100%' }) }}>
                 <option value="">None</option>
-                <option value="Must">Must Have</option>
-                <option value="Should">Should Have</option>
-                <option value="Could">Could Have</option>
-                <option value="Wont">Won&apos;t Have</option>
-              </select>
-            </div>
-
-            {/* Sprint */}
-            <div>
-              {label('Sprint')}
-              <select value={form.sprint_id || ''} onChange={e => setForm(f => ({ ...f, sprint_id: e.target.value ? parseInt(e.target.value) : null }))} style={inp()}>
-                <option value="">No Sprint</option>
-                {sprints.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                {Object.keys(PRIORITY_COLORS).map(p => <option key={p} value={p}>{p}</option>)}
               </select>
             </div>
 
             {/* Hours */}
             <div>
-              {label('Hours')}
-              <input type="number" min={0} step={0.5} value={form.hours || 0} onChange={e => setForm(f => ({ ...f, hours: parseFloat(e.target.value) || 0 }))} style={inp()} />
+              <label style={{ fontSize: 10, color: 'var(--text-dim)', letterSpacing: '0.08em', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Hours</label>
+              <input type="number" min={0} step={0.5} value={form.hours ?? 0} onChange={e => setForm(f => ({ ...f, hours: +e.target.value }))} style={{ ...inp({ width: '100%' }) }} />
             </div>
 
-            {/* Due Date */}
+            {/* Sprint */}
             <div>
-              {label('Due Date')}
-              <input type="date" value={form.due_date || ''} onChange={e => setForm(f => ({ ...f, due_date: e.target.value || null }))} style={inp()} />
+              <label style={{ fontSize: 10, color: 'var(--text-dim)', letterSpacing: '0.08em', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Sprint</label>
+              <select value={form.sprint_id ?? ''} onChange={e => setForm(f => ({ ...f, sprint_id: e.target.value ? +e.target.value : null }))} style={{ ...inp({ width: '100%' }) }}>
+                <option value="">No Sprint</option>
+                {sprints.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
             </div>
 
             {/* Epic */}
             <div>
-              {label('Epic')}
-              {currentEpic ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: currentEpic.color }}>◆ {currentEpic.title}</span>
-                  <button onClick={() => setForm(f => ({ ...f, epic_id: null }))} style={{ background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 0 }}>×</button>
-                </div>
+              <label style={{ fontSize: 10, color: 'var(--text-dim)', letterSpacing: '0.08em', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Epic</label>
+              <select value={form.epic_id ?? ''} onChange={e => setForm(f => ({ ...f, epic_id: e.target.value ? +e.target.value : null }))} style={{ ...inp({ width: '100%' }) }}>
+                <option value="">No Epic</option>
+                {epics.map(e => <option key={e.id} value={e.id}>{e.title}</option>)}
+              </select>
+              {!showNewEpic ? (
+                <button onClick={() => setShowNewEpic(true)} style={{ marginTop: 6, background: 'none', border: 'none', color: 'var(--accent)', fontSize: 10, cursor: 'pointer', padding: 0, letterSpacing: '0.06em' }}>+ New Epic</button>
               ) : (
-                <select value={form.epic_id || ''} onChange={e => setForm(f => ({ ...f, epic_id: e.target.value ? parseInt(e.target.value) : null }))} style={inp()}>
-                  <option value="">No Epic</option>
-                  {epics.map(ep => <option key={ep.id} value={ep.id}>{ep.title}</option>)}
-                </select>
-              )}
-              <button onClick={() => setShowNewEpic(!showNewEpic)} style={{ background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 11, padding: '4px 0', display: 'block' }}>
-                + New Epic
-              </button>
-              {showNewEpic && (
                 <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  <input placeholder="Epic name" value={newEpic.title} onChange={e => setNewEpic(n => ({ ...n, title: e.target.value }))} style={inp({ fontSize: 12 })} />
+                  <input placeholder="Epic title" value={newEpic.title} onChange={e => setNewEpic(n => ({ ...n, title: e.target.value }))} style={{ ...inp({ width: '100%' }) }} />
                   <div style={{ display: 'flex', gap: 4 }}>
-                    {['#6366f1','#10b981','#f59e0b','#ec4899','#ef4444'].map(c => (
-                      <div key={c} onClick={() => setNewEpic(n => ({ ...n, color: c }))} style={{ width: 20, height: 20, borderRadius: '50%', background: c, cursor: 'pointer', border: newEpic.color === c ? '2px solid white' : '2px solid transparent' }} />
-                    ))}
+                    <input type="color" value={newEpic.color} onChange={e => setNewEpic(n => ({ ...n, color: e.target.value }))} style={{ width: 28, height: 28, padding: 2, border: '1px solid var(--border)', borderRadius: 4, background: 'none', cursor: 'pointer' }} />
+                    <button onClick={createEpicAndAssign} style={{ flex: 1, background: 'var(--accent)', color: '#000', border: 'none', borderRadius: 4, fontSize: 10, fontWeight: 700, cursor: 'pointer' }}>Create</button>
+                    <button onClick={() => setShowNewEpic(false)} style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 4, fontSize: 10, color: 'var(--text-dim)', cursor: 'pointer', padding: '0 8px' }}>✕</button>
                   </div>
-                  <button onClick={createEpicAndAssign} style={{ background: 'var(--accent)', color: '#000', border: 'none', borderRadius: 4, padding: '4px 8px', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
-                    Create & Assign
-                  </button>
                 </div>
               )}
             </div>
 
             {/* Save */}
-            <button
-              onClick={handleSave}
-              disabled={saving || !form.title.trim()}
-              style={{ background: 'var(--accent)', color: '#000', border: 'none', borderRadius: 8, padding: '10px', fontSize: 12, fontWeight: 800, cursor: 'pointer', letterSpacing: '0.06em', textTransform: 'uppercase', fontFamily: 'var(--font-syne)', opacity: saving ? 0.6 : 1, marginTop: 4 }}
-            >
+            <button onClick={handleSave} disabled={saving} style={{ background: 'var(--accent)', color: '#000', border: 'none', borderRadius: 6, padding: '8px 0', fontSize: 11, fontWeight: 700, cursor: 'pointer', letterSpacing: '0.08em', fontFamily: 'var(--font-syne)', textTransform: 'uppercase', opacity: saving ? 0.6 : 1 }}>
               {saving ? 'Saving…' : 'Save Changes'}
             </button>
           </div>
@@ -302,37 +272,191 @@ function CardDetailModal({ card, columns, sprints, epics, onClose, onSave }: {
   );
 }
 
-// ─── Main Sprint Page ──────────────────────────────────────────────────────────
+// ─── Draggable Card ─────────────────────────────────────────────────────────
 
-export default function SprintPage() {
+function DraggableCard({ card, epics, onClick }: { card: Card; epics: Epic[]; onClick: () => void }) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: `card-${card.id}` });
+  const style = {
+    transform: transform ? `translate3d(${transform.x}px,${transform.y}px,0)` : undefined,
+    opacity: isDragging ? 0.4 : 1,
+    cursor: isDragging ? 'grabbing' : 'grab',
+  };
+  return (
+    <div ref={setNodeRef} style={style} {...listeners} {...attributes}>
+      <CardChip card={card} epics={epics} onClick={onClick} />
+    </div>
+  );
+}
+
+// ─── Card Chip (shared between draggable + overlay) ─────────────────────────
+
+function CardChip({ card, epics, onClick }: { card: Card; epics: Epic[]; onClick?: () => void }) {
+  const epic = epics.find(e => e.id === card.epic_id);
+  return (
+    <div
+      onClick={onClick}
+      style={{
+        background: 'var(--surface)',
+        border: '1px solid var(--border)',
+        borderRadius: 8,
+        padding: '10px 12px',
+        userSelect: 'none',
+      }}
+    >
+      {epic && (
+        <div style={{ fontSize: 10, color: epic.color, fontWeight: 700, marginBottom: 5, letterSpacing: '0.06em' }}>◆ {epic.title}</div>
+      )}
+      <div style={{ fontSize: 13, color: 'var(--text)', lineHeight: 1.4, marginBottom: 8 }}>{card.title}</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
+        {card.priority && (
+          <span style={{ fontSize: 10, fontWeight: 600, color: PRIORITY_COLORS[card.priority] || '#6b7280', background: `${PRIORITY_COLORS[card.priority] || '#6b7280'}18`, padding: '1px 6px', borderRadius: 4 }}>
+            {card.priority}
+          </span>
+        )}
+        {card.assignee && (
+          <div style={{ marginLeft: 'auto', width: 20, height: 20, borderRadius: '50%', background: ASSIGNEE_COLORS[card.assignee] || '#6b7280', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: '#fff', flexShrink: 0 }}>
+            {ASSIGNEE_INITIALS[card.assignee] || card.assignee[0]}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Droppable Column ────────────────────────────────────────────────────────
+
+function DroppableColumn({ col, cards, epics, onCardClick }: {
+  col: Column;
+  cards: Card[];
+  epics: Epic[];
+  onCardClick: (card: Card) => void;
+}) {
+  const { setNodeRef, isOver } = useDroppable({ id: `col-${col.id}` });
+  const label = SPRINT_COLUMN_MAP[col.title] || col.title;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', flex: '1 1 0', minWidth: 200, maxWidth: 340, height: '100%' }}>
+      {/* Column header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, flexShrink: 0 }}>
+        <span style={{ fontFamily: 'var(--font-syne)', fontWeight: 700, fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-dim)' }}>
+          {label}
+        </span>
+        <span style={{ fontSize: 11, color: 'var(--text-dim)', background: 'var(--surface)', padding: '1px 7px', borderRadius: 10, border: '1px solid var(--border)' }}>
+          {cards.length}
+        </span>
+      </div>
+
+      {/* Cards container - scrollable */}
+      <div
+        ref={setNodeRef}
+        style={{
+          flex: 1,
+          overflowY: 'auto',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 8,
+          padding: '4px 2px 12px',
+          borderTop: `2px solid ${isOver ? 'var(--accent)' : 'var(--border)'}`,
+          borderRadius: 2,
+          transition: 'border-color 0.15s',
+          minHeight: 60,
+        }}
+      >
+        {cards.length === 0 && (
+          <div style={{ fontSize: 11, color: 'var(--text-dim)', padding: '16px 0', textAlign: 'center' }}>
+            {isOver ? 'Drop here' : 'No tasks'}
+          </div>
+        )}
+        {cards.map(card => (
+          <DraggableCard
+            key={card.id}
+            card={card}
+            epics={epics}
+            onClick={() => onCardClick(card)}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Main Page ───────────────────────────────────────────────────────────────
+
+export default function SprintsPage() {
   const [sprints, setSprints] = useState<Sprint[]>([]);
-  const [cards, setCards] = useState<Card[]>([]);
   const [columns, setColumns] = useState<Column[]>([]);
+  const [cards, setCards] = useState<Card[]>([]);
   const [epics, setEpics] = useState<Epic[]>([]);
-  const [activeSprint, setActiveSprint] = useState<Sprint | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [selectedCard, setSelectedCard] = useState<Card | null>(null);
+  const [activeDragId, setActiveDragId] = useState<string | null>(null);
   const [showNewSprint, setShowNewSprint] = useState(false);
   const [newSprint, setNewSprint] = useState({ name: '', start_date: '', end_date: '' });
   const [saving, setSaving] = useState(false);
-  const [selectedCard, setSelectedCard] = useState<Card | null>(null);
+
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
   const load = useCallback(async () => {
-    const [sprintsRes, cardsRes, colsRes, epicsRes] = await Promise.all([
-      fetch('/api/sprints').then(r => r.json()),
-      fetch('/api/cards').then(r => r.json()),
-      fetch('/api/columns').then(r => r.json()),
-      fetch('/api/epics').then(r => r.json()),
+    const [spRes, colRes, cardRes, epRes] = await Promise.all([
+      fetch('/api/sprints'), fetch('/api/columns'), fetch('/api/cards'), fetch('/api/epics'),
     ]);
-    setSprints(sprintsRes);
-    setCards(cardsRes);
-    setColumns(colsRes.sort((a: Column, b: Column) => a.position - b.position));
-    setEpics(epicsRes);
-    const active = sprintsRes.find((s: Sprint) => s.status === 'active') || sprintsRes[0] || null;
-    setActiveSprint(active);
-    setLoading(false);
+    const [spData, colData, cardData, epData] = await Promise.all([
+      spRes.json(), colRes.json(), cardRes.json(), epRes.json(),
+    ]);
+    setSprints(spData);
+    // Only keep the 4 sprint columns
+    const filtered = (colData as Column[]).filter(c => Object.keys(SPRINT_COLUMN_MAP).includes(c.title));
+    setColumns(filtered);
+    setCards(cardData);
+    setEpics(epData);
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  const activeSprint = sprints.find(s => s.status === 'active');
+  const sprintCards = activeSprint ? cards.filter(c => c.sprint_id === activeSprint.id) : [];
+  const doneColId = columns.find(c => c.title === 'Done')?.id ?? null;
+
+  // Drag handlers
+  function handleDragStart(event: DragStartEvent) {
+    setActiveDragId(String(event.active.id));
+  }
+
+  async function handleDragEnd(event: DragEndEvent) {
+    setActiveDragId(null);
+    const { active, over } = event;
+    if (!over) return;
+    const cardId = parseInt(String(active.id).replace('card-', ''));
+    const colId = parseInt(String(over.id).replace('col-', ''));
+    if (isNaN(cardId) || isNaN(colId)) return;
+    const card = cards.find(c => c.id === cardId);
+    if (!card || card.column_id === colId) return;
+
+    // Optimistic update
+    setCards(cs => cs.map(c => c.id === cardId ? { ...c, column_id: colId } : c));
+
+    // Persist
+    await fetch(`/api/cards/${cardId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ column_id: colId }),
+    });
+
+    // Update selected card if open
+    if (selectedCard?.id === cardId) {
+      setSelectedCard(sc => sc ? { ...sc, column_id: colId } : sc);
+    }
+  }
+
+  async function updateCard(updated: Partial<Card>) {
+    if (!selectedCard) return;
+    setCards(cs => cs.map(c => c.id === selectedCard.id ? { ...c, ...updated } : c));
+    setSelectedCard(sc => sc ? { ...sc, ...updated } : sc);
+    await fetch(`/api/cards/${selectedCard.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updated),
+    });
+  }
 
   async function createSprint() {
     if (!newSprint.name.trim()) return;
@@ -342,51 +466,26 @@ export default function SprintPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(newSprint),
     });
+    await load();
     setNewSprint({ name: '', start_date: '', end_date: '' });
     setShowNewSprint(false);
     setSaving(false);
-    load();
   }
 
   async function setSprintActive(sprint: Sprint) {
-    for (const s of sprints) {
-      if (s.status === 'active') {
-        await fetch(`/api/sprints/${s.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...s, status: 'closed' }) });
-      }
-    }
-    await fetch(`/api/sprints/${sprint.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...sprint, status: 'active' }) });
-    load();
-  }
-
-  async function saveCard(updated: Partial<Card>) {
-    if (!selectedCard) return;
-    const res = await fetch(`/api/cards/${selectedCard.id}`, {
+    await fetch(`/api/sprints/${sprint.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...selectedCard, ...updated }),
+      body: JSON.stringify({ status: 'active' }),
     });
-    const saved = await res.json();
-    setCards(cs => cs.map(c => c.id === saved.id ? saved : c));
-    setSelectedCard(null);
+    await load();
   }
 
-  if (loading) {
+  if (!columns.length) {
     return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', color: 'var(--text-dim)' }}>Loading…</div>;
   }
 
-  const sprintCards = activeSprint ? cards.filter(c => c.sprint_id === activeSprint.id) : [];
-  const doneColId = columns.find(c => c.title === 'Done')?.id;
-  const doneCards = sprintCards.filter(c => c.column_id === doneColId);
-  const progress = sprintCards.length > 0 ? Math.round((doneCards.length / sprintCards.length) * 100) : 0;
-
-  // Rename "Backlog" → "To-do" for sprint view
-  const sprintColumns = columns.map(c => ({ ...c, title: c.title === 'Backlog' ? 'To-do' : c.title }));
-
-  const inp = (style?: object) => ({
-    background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 6,
-    padding: '6px 10px', color: 'var(--text)', fontSize: 13, outline: 'none',
-    boxSizing: 'border-box' as const, ...style,
-  });
+  const draggedCard = activeDragId ? cards.find(c => `card-${c.id}` === activeDragId) : null;
 
   return (
     <>
@@ -397,178 +496,117 @@ export default function SprintPage() {
           sprints={sprints}
           epics={epics}
           onClose={() => setSelectedCard(null)}
-          onSave={saveCard}
+          onSave={updateCard}
+          onEpicCreated={epic => setEpics(es => [...es, epic])}
         />
       )}
 
-      <div style={{ minHeight: '100vh', overflowY: 'auto', background: 'var(--bg)', padding: '80px 24px 60px', fontFamily: 'var(--font-geist-mono, monospace)' }}>
-        <div style={{ maxWidth: 1200, margin: '0 auto' }}>
+      {/* Full-height Jira-style layout */}
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', background: 'var(--bg)', fontFamily: 'var(--font-geist-mono, monospace)' }}>
 
-          {/* Header */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 32 }}>
-            <Link href="/" style={{ color: 'var(--text-dim)', textDecoration: 'none', fontSize: 12, letterSpacing: '0.08em', display: 'flex', alignItems: 'center', gap: 6 }}>
-              ← BOARD
-            </Link>
-            <span style={{ color: 'var(--border)' }}>|</span>
-            <span style={{ color: 'var(--accent)', fontFamily: 'var(--font-syne)', fontWeight: 700, fontSize: 13, letterSpacing: '0.12em', textTransform: 'uppercase' }}>
-              ⚡ Sprint
-            </span>
-          </div>
-
-          {/* Active Sprint Header */}
+        {/* Top bar */}
+        <div style={{ flexShrink: 0, padding: '16px 24px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 16 }}>
+          <Link href="/" style={{ color: 'var(--text-dim)', textDecoration: 'none', fontSize: 12, letterSpacing: '0.08em', display: 'flex', alignItems: 'center', gap: 6 }}>
+            ← Board
+          </Link>
+          <span style={{ color: 'var(--border)' }}>|</span>
           {activeSprint ? (
-            <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: '20px 24px', marginBottom: 32 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-                    <span style={{ background: 'rgba(99,102,241,0.15)', color: '#818cf8', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', padding: '2px 8px', borderRadius: 4, textTransform: 'uppercase' }}>Active Sprint</span>
-                  </div>
-                  <h1 style={{ margin: 0, fontFamily: 'var(--font-syne)', fontWeight: 800, fontSize: 22, color: 'var(--text)', letterSpacing: '-0.02em' }}>
-                    {activeSprint.name}
-                  </h1>
-                  <p style={{ margin: '4px 0 0', color: 'var(--text-dim)', fontSize: 12 }}>
-                    {formatDate(activeSprint.start_date)} → {formatDate(activeSprint.end_date)}
-                  </p>
-                </div>
-                <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: 28, fontWeight: 700, color: 'var(--text)' }}>
-                    {doneCards.length}<span style={{ color: 'var(--text-dim)', fontSize: 15 }}>/{sprintCards.length}</span>
-                  </div>
-                  <div style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 6 }}>tasks done</div>
-                  <div style={{ width: 140, height: 6, background: 'var(--border)', borderRadius: 3, overflow: 'hidden' }}>
-                    <div style={{ width: `${progress}%`, height: '100%', background: progress === 100 ? '#10b981' : 'var(--accent)', borderRadius: 3, transition: 'width 0.3s' }} />
-                  </div>
-                  <div style={{ fontSize: 10, color: 'var(--text-dim)', marginTop: 4 }}>{progress}% complete</div>
-                </div>
-              </div>
-            </div>
+            <>
+              <span style={{ fontFamily: 'var(--font-syne)', fontWeight: 700, fontSize: 14, color: 'var(--text)' }}>{activeSprint.name}</span>
+              <span style={{ fontSize: 11, color: 'var(--text-dim)', background: 'rgba(99,102,241,0.12)', color: '#818cf8', padding: '2px 8px', borderRadius: 4, fontWeight: 700 }}>ACTIVE</span>
+              <span style={{ fontSize: 11, color: 'var(--text-dim)', marginLeft: 4 }}>{formatDate(activeSprint.start_date)} – {formatDate(activeSprint.end_date)}</span>
+              <span style={{ fontSize: 11, color: 'var(--text-dim)', marginLeft: 'auto' }}>
+                {doneColId ? sprintCards.filter(c => c.column_id === doneColId).length : 0}/{sprintCards.length} done
+              </span>
+            </>
           ) : (
-            <div style={{ textAlign: 'center', padding: 48, color: 'var(--text-dim)', border: '1px dashed var(--border)', borderRadius: 12, marginBottom: 32 }}>
-              No active sprint. Create one below.
-            </div>
+            <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>No active sprint</span>
           )}
+        </div>
 
-          {/* Sprint board columns */}
-          {activeSprint && (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 48 }}>
-              {sprintColumns.map(col => {
-                const origCol = columns.find(c => c.id === col.id)!;
-                const colCards = sprintCards.filter(c => c.column_id === origCol.id);
+        {/* Board area */}
+        {activeSprint ? (
+          <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+            <div style={{ flex: 1, display: 'flex', gap: 16, padding: '20px 24px', overflow: 'hidden', minHeight: 0 }}>
+              {columns.map(col => {
+                const colCards = sprintCards.filter(c => c.column_id === col.id);
                 return (
-                  <div key={col.id}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                      <span style={{ fontFamily: 'var(--font-syne)', fontWeight: 700, fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-dim)' }}>
-                        {col.title}
-                      </span>
-                      <span style={{ fontSize: 11, color: 'var(--text-dim)', background: 'var(--surface)', padding: '1px 7px', borderRadius: 10, border: '1px solid var(--border)' }}>
-                        {colCards.length}
-                      </span>
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      {colCards.length === 0 ? (
-                        <div style={{ fontSize: 11, color: 'var(--text-dim)', padding: '12px 0', textAlign: 'center', borderTop: '1px solid var(--border)' }}>Empty</div>
-                      ) : colCards.map(card => {
-                        const epic = epics.find(e => e.id === card.epic_id);
-                        return (
-                          <div
-                            key={card.id}
-                            onClick={() => setSelectedCard(card)}
-                            style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, padding: '10px 12px', cursor: 'pointer', transition: 'border-color 0.2s', position: 'relative' }}
-                            onMouseEnter={e => (e.currentTarget.style.borderColor = 'var(--accent)')}
-                            onMouseLeave={e => (e.currentTarget.style.borderColor = 'var(--border)')}
-                          >
-                            {epic && (
-                              <div style={{ fontSize: 10, color: epic.color, fontWeight: 700, marginBottom: 5 }}>◆ {epic.title}</div>
-                            )}
-                            <div style={{ fontSize: 13, color: 'var(--text)', lineHeight: 1.4, marginBottom: 8 }}>{card.title}</div>
-
-                            {/* Progress bar */}
-                            {(card.progress ?? 0) > 0 && (
-                              <div style={{ height: 3, background: 'var(--border)', borderRadius: 2, marginBottom: 8, overflow: 'hidden' }}>
-                                <div style={{ width: `${card.progress}%`, height: '100%', background: card.progress === 100 ? '#10b981' : 'var(--accent)', borderRadius: 2 }} />
-                              </div>
-                            )}
-
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
-                              {card.priority && (
-                                <span style={{ fontSize: 10, fontWeight: 600, color: PRIORITY_COLORS[card.priority] || '#6b7280', background: `${PRIORITY_COLORS[card.priority] || '#6b7280'}18`, padding: '1px 6px', borderRadius: 4 }}>
-                                  {card.priority}
-                                </span>
-                              )}
-                              {card.assignee && (
-                                <span style={{ fontSize: 10, fontWeight: 600, color: ASSIGNEE_COLORS[card.assignee] || '#9ca3af', background: `${ASSIGNEE_COLORS[card.assignee] || '#9ca3af'}18`, padding: '1px 6px', borderRadius: 4 }}>
-                                  {card.assignee}
-                                </span>
-                              )}
-                              {(card.progress ?? 0) > 0 && (
-                                <span style={{ fontSize: 10, color: 'var(--text-dim)', marginLeft: 'auto' }}>{card.progress}%</span>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
+                  <DroppableColumn
+                    key={col.id}
+                    col={col}
+                    cards={colCards}
+                    epics={epics}
+                    onCardClick={setSelectedCard}
+                  />
                 );
               })}
             </div>
-          )}
+            <DragOverlay>
+              {draggedCard ? <CardChip card={draggedCard} epics={epics} /> : null}
+            </DragOverlay>
+          </DndContext>
+        ) : (
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ textAlign: 'center', color: 'var(--text-dim)' }}>
+              <div style={{ fontSize: 14, marginBottom: 8 }}>No active sprint</div>
+              <div style={{ fontSize: 12 }}>Create or activate a sprint below</div>
+            </div>
+          </div>
+        )}
 
-          {/* Sprint List + Create */}
-          <div style={{ borderTop: '1px solid var(--border)', paddingTop: 32 }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-              <span style={{ fontFamily: 'var(--font-syne)', fontWeight: 700, fontSize: 12, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-dim)' }}>All Sprints</span>
-              <button onClick={() => setShowNewSprint(!showNewSprint)} style={{ background: 'var(--accent-dim)', color: 'var(--accent)', border: '1px solid var(--accent-dim)', borderRadius: 6, padding: '5px 12px', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', cursor: 'pointer', fontFamily: 'var(--font-syne)', textTransform: 'uppercase' }}>
-                + New Sprint
+        {/* Sprints list footer - collapsible */}
+        <div style={{ flexShrink: 0, borderTop: '1px solid var(--border)', padding: '16px 24px', maxHeight: 220, overflowY: 'auto' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+            <span style={{ fontFamily: 'var(--font-syne)', fontWeight: 700, fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-dim)' }}>All Sprints</span>
+            <button onClick={() => setShowNewSprint(!showNewSprint)} style={{ background: 'var(--accent-dim)', color: 'var(--accent)', border: '1px solid var(--accent-dim)', borderRadius: 6, padding: '4px 12px', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', cursor: 'pointer', fontFamily: 'var(--font-syne)', textTransform: 'uppercase' }}>
+              + New Sprint
+            </button>
+          </div>
+
+          {showNewSprint && (
+            <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, padding: 14, marginBottom: 12, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+              <div style={{ flex: '1 1 160px' }}>
+                <label style={{ fontSize: 10, color: 'var(--text-dim)', letterSpacing: '0.08em', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Name</label>
+                <input style={{ ...inp({ width: '100%' }) }} placeholder="Sprint 2 - March 9" value={newSprint.name} onChange={e => setNewSprint(s => ({ ...s, name: e.target.value }))} />
+              </div>
+              <div style={{ flex: '0 0 120px' }}>
+                <label style={{ fontSize: 10, color: 'var(--text-dim)', letterSpacing: '0.08em', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Start</label>
+                <input type="date" style={{ ...inp({ width: '100%' }) }} value={newSprint.start_date} onChange={e => setNewSprint(s => ({ ...s, start_date: e.target.value }))} />
+              </div>
+              <div style={{ flex: '0 0 120px' }}>
+                <label style={{ fontSize: 10, color: 'var(--text-dim)', letterSpacing: '0.08em', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>End</label>
+                <input type="date" style={{ ...inp({ width: '100%' }) }} value={newSprint.end_date} onChange={e => setNewSprint(s => ({ ...s, end_date: e.target.value }))} />
+              </div>
+              <button onClick={createSprint} disabled={saving || !newSprint.name.trim()} style={{ background: 'var(--accent)', color: '#000', border: 'none', borderRadius: 6, padding: '7px 16px', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font-syne)', textTransform: 'uppercase', letterSpacing: '0.08em', opacity: saving ? 0.6 : 1 }}>
+                {saving ? 'Creating…' : 'Create'}
               </button>
             </div>
+          )}
 
-            {showNewSprint && (
-              <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, padding: 16, marginBottom: 20, display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-                <div style={{ flex: '1 1 180px' }}>
-                  <label style={{ fontSize: 10, color: 'var(--text-dim)', letterSpacing: '0.08em', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Name</label>
-                  <input style={{ ...inp({ width: '100%' }) }} placeholder="Sprint 2 - March 9" value={newSprint.name} onChange={e => setNewSprint(s => ({ ...s, name: e.target.value }))} />
-                </div>
-                <div style={{ flex: '0 0 130px' }}>
-                  <label style={{ fontSize: 10, color: 'var(--text-dim)', letterSpacing: '0.08em', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Start</label>
-                  <input type="date" style={{ ...inp({ width: '100%' }) }} value={newSprint.start_date} onChange={e => setNewSprint(s => ({ ...s, start_date: e.target.value }))} />
-                </div>
-                <div style={{ flex: '0 0 130px' }}>
-                  <label style={{ fontSize: 10, color: 'var(--text-dim)', letterSpacing: '0.08em', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>End</label>
-                  <input type="date" style={{ ...inp({ width: '100%' }) }} value={newSprint.end_date} onChange={e => setNewSprint(s => ({ ...s, end_date: e.target.value }))} />
-                </div>
-                <button onClick={createSprint} disabled={saving || !newSprint.name.trim()} style={{ background: 'var(--accent)', color: '#000', border: 'none', borderRadius: 6, padding: '7px 16px', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font-syne)', textTransform: 'uppercase', letterSpacing: '0.08em', opacity: saving ? 0.6 : 1 }}>
-                  {saving ? 'Creating…' : 'Create'}
-                </button>
-              </div>
-            )}
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {sprints.map(sprint => {
-                const sCards = cards.filter(c => c.sprint_id === sprint.id);
-                const sDone = doneColId ? sCards.filter(c => c.column_id === doneColId).length : 0;
-                const isActive = sprint.status === 'active';
-                return (
-                  <div key={sprint.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: isActive ? 'rgba(99,102,241,0.05)' : 'var(--surface)', border: `1px solid ${isActive ? 'rgba(99,102,241,0.25)' : 'var(--border)'}`, borderRadius: 8, padding: '10px 16px', gap: 12 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                      {isActive && <span style={{ fontSize: 10, background: 'rgba(99,102,241,0.15)', color: '#818cf8', padding: '1px 7px', borderRadius: 4, fontWeight: 700, letterSpacing: '0.08em' }}>ACTIVE</span>}
-                      <span style={{ fontSize: 13, color: 'var(--text)', fontWeight: isActive ? 600 : 400 }}>{sprint.name}</span>
-                      <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>{formatDate(sprint.start_date)} → {formatDate(sprint.end_date)}</span>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                      <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>{sDone}/{sCards.length} done</span>
-                      {!isActive && (
-                        <button onClick={() => setSprintActive(sprint)} style={{ fontSize: 10, color: 'var(--accent)', background: 'var(--accent-dim)', border: '1px solid var(--accent-dim)', borderRadius: 4, padding: '2px 8px', cursor: 'pointer', fontWeight: 700, letterSpacing: '0.08em', fontFamily: 'var(--font-syne)', textTransform: 'uppercase' }}>
-                          Set Active
-                        </button>
-                      )}
-                    </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {sprints.map(sprint => {
+              const sCards = cards.filter(c => c.sprint_id === sprint.id);
+              const sDone = doneColId ? sCards.filter(c => c.column_id === doneColId).length : 0;
+              const isActive = sprint.status === 'active';
+              return (
+                <div key={sprint.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: isActive ? 'rgba(99,102,241,0.05)' : 'var(--surface)', border: `1px solid ${isActive ? 'rgba(99,102,241,0.25)' : 'var(--border)'}`, borderRadius: 8, padding: '8px 14px', gap: 12 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    {isActive && <span style={{ fontSize: 10, background: 'rgba(99,102,241,0.15)', color: '#818cf8', padding: '1px 7px', borderRadius: 4, fontWeight: 700, letterSpacing: '0.08em' }}>ACTIVE</span>}
+                    <span style={{ fontSize: 13, color: 'var(--text)', fontWeight: isActive ? 600 : 400 }}>{sprint.name}</span>
+                    <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>{formatDate(sprint.start_date)} – {formatDate(sprint.end_date)}</span>
                   </div>
-                );
-              })}
-            </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                    <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>{sDone}/{sCards.length} done</span>
+                    {!isActive && (
+                      <button onClick={() => setSprintActive(sprint)} style={{ fontSize: 10, color: 'var(--accent)', background: 'var(--accent-dim)', border: '1px solid var(--accent-dim)', borderRadius: 4, padding: '2px 8px', cursor: 'pointer', fontWeight: 700, letterSpacing: '0.08em', fontFamily: 'var(--font-syne)', textTransform: 'uppercase' }}>
+                        Set Active
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
-
         </div>
       </div>
     </>
