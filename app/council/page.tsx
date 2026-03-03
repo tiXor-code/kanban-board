@@ -27,6 +27,16 @@ interface ModelState {
   cost: number;
 }
 
+interface Session {
+  id: string;
+  prompt: string;
+  stage: string;
+  startedAt: number;
+  completedAt?: number;
+  tokens?: number;
+  cost?: number;
+}
+
 interface Verdict {
   recommendation: string;
   confidence: "HIGH" | "MEDIUM" | "LOW";
@@ -665,6 +675,8 @@ export default function CouncilPage() {
   const [useMock, setUseMock] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [stats, setStats] = useState<KpiStats | null>(null);
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
 
   const reducedMotion =
     typeof window !== "undefined"
@@ -743,7 +755,8 @@ export default function CouncilPage() {
   useEffect(() => {
     let cancelled = false;
     async function poll() {
-      const url = useMock ? "/api/council/mock" : "/api/council/events";
+      const sessionParam = selectedSessionId ? `?sessionId=${selectedSessionId}` : "";
+    const url = useMock ? "/api/council/mock" : `/api/council/events${sessionParam}`;
       try {
         const res = await fetch(url);
         const data: CouncilEvent[] = await res.json();
@@ -753,7 +766,7 @@ export default function CouncilPage() {
     poll();
     const interval = setInterval(poll, useMock ? 10000 : 2000);
     return () => { cancelled = true; clearInterval(interval); };
-  }, [useMock, processEvents]);
+  }, [useMock, processEvents, selectedSessionId]);
 
   // Fetch KPI stats
   useEffect(() => {
@@ -767,6 +780,24 @@ export default function CouncilPage() {
     loadStats();
     const interval = setInterval(loadStats, 30000);
     return () => clearInterval(interval);
+  }, []);
+
+  // Fetch sessions list
+  useEffect(() => {
+    async function loadSessions() {
+      try {
+        const res = await fetch("/api/council/sessions");
+        const data: Session[] = await res.json();
+        setSessions(data);
+        if (data.length > 0 && !selectedSessionId) {
+          setSelectedSessionId(data[0].id);
+        }
+      } catch { /* ignore */ }
+    }
+    loadSessions();
+    const interval = setInterval(loadSessions, 30000);
+    return () => clearInterval(interval);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Elapsed timer
@@ -873,14 +904,43 @@ export default function CouncilPage() {
             The Council
           </h1>
 
-          {/* Session timer (center) */}
+          {/* Session selector (center) */}
           <div style={{ position: "absolute", left: "50%", transform: "translateX(-50%)", display: "flex", alignItems: "center", gap: 8 }}>
-            {sessionStart ? (
-              <span style={{ fontFamily: "monospace", fontSize: 13, color: "#6b7280", fontVariantNumeric: "tabular-nums", letterSpacing: "0.08em" }} aria-label={`Session elapsed: ${elapsed} seconds`}>
+            {sessions.length > 0 ? (
+              <select
+                value={selectedSessionId ?? ""}
+                onChange={(e) => {
+                  setSelectedSessionId(e.target.value);
+                  processedIds.current.clear();
+                  setEvents([]);
+                  setModels({ claude: { ...INITIAL_MODEL_STATE }, gpt: { ...INITIAL_MODEL_STATE }, gemini: { ...INITIAL_MODEL_STATE }, system: { ...INITIAL_MODEL_STATE } });
+                  setCurrentPhase(null); setCurrentQuestion(""); setVerdict(null); setSessionStart(null); setElapsed(0);
+                }}
+                style={{
+                  fontFamily: "monospace",
+                  fontSize: 11,
+                  color: "#6b7280",
+                  background: "transparent",
+                  border: "1px solid #1f2937",
+                  borderRadius: 4,
+                  padding: "3px 8px",
+                  maxWidth: 320,
+                  cursor: "pointer",
+                }}
+              >
+                {sessions.map((s) => (
+                  <option key={s.id} value={s.id} style={{ background: "#0a0d14", color: "#e5e7eb" }}>
+                    {new Date(s.startedAt).toLocaleDateString("en-GB", { day: "2-digit", month: "short" })} — {s.prompt.slice(0, 60)}{s.prompt.length > 60 ? "…" : ""}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <span style={{ fontFamily: "monospace", fontSize: 11, color: "#374151" }}>Loading sessions…</span>
+            )}
+            {sessionStart && (
+              <span style={{ fontFamily: "monospace", fontSize: 12, color: "#4b5563", fontVariantNumeric: "tabular-nums" }}>
                 {formatElapsed()}
               </span>
-            ) : (
-              <span style={{ fontFamily: "monospace", fontSize: 11, color: "#374151" }}>--:--</span>
             )}
           </div>
 
