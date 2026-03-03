@@ -8,6 +8,7 @@ export default function NavTabs() {
   const isBoard = path === "/" || path === "";
   const isCouncil = path.startsWith("/council");
   const isSprint = path.startsWith("/sprints");
+  const isRoadmap = path.startsWith("/roadmap");
 
   const tab = (
     href: string,
@@ -30,16 +31,20 @@ export default function NavTabs() {
         letterSpacing: "0.12em",
         textTransform: "uppercase",
         textDecoration: "none",
-        color: active ? (isCouncil && active ? "#b8902a" : "var(--accent)") : "var(--text-dim)",
+        color: active ? (isCouncil && active ? "#b8902a" : isRoadmap && active ? "#a78bfa" : "var(--accent)") : "var(--text-dim)",
         background: active
           ? isCouncil
             ? "rgba(184,144,42,0.1)"
+            : isRoadmap
+            ? "rgba(167,139,250,0.1)"
             : "var(--accent-dim)"
           : "transparent",
         border: `1px solid ${
           active
             ? isCouncil
               ? "rgba(184,144,42,0.25)"
+              : isRoadmap
+              ? "rgba(167,139,250,0.25)"
               : "var(--accent-dim)"
             : "transparent"
         }`,
@@ -62,7 +67,7 @@ export default function NavTabs() {
         zIndex: 200,
         display: "flex",
         gap: "4px",
-        background: isCouncil ? "rgba(10,13,20,0.9)" : "rgba(14,17,23,0.85)",
+        background: isCouncil ? "rgba(10,13,20,0.9)" : isRoadmap ? "rgba(10,10,18,0.9)" : "rgba(14,17,23,0.85)",
         backdropFilter: "blur(12px)",
         border: `1px solid ${isCouncil ? "#1f2937" : "var(--border)"}`,
         borderRadius: "10px",
@@ -71,6 +76,7 @@ export default function NavTabs() {
     >
       {tab("/", "Board", isBoard, "⬛")}
       {tab("/sprints", "Sprint", isSprint, "⚡")}
+      {tab("/roadmap", "Roadmap", isRoadmap, "◈")}
       {tab("/council", "The Council", isCouncil, "⬡")}
     </nav>
   );
