@@ -656,7 +656,7 @@ export default function SprintsPage() {
     await fetch(`/api/sprints/${sprint.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: 'active' }),
+      body: JSON.stringify({ name: sprint.name, start_date: sprint.start_date, end_date: sprint.end_date, status: 'active' }),
     });
     await load();
   }
