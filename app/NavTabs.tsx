@@ -9,6 +9,7 @@ export default function NavTabs() {
   const isCouncil = path.startsWith("/council");
   const isSprint = path.startsWith("/sprints");
   const isRoadmap = path.startsWith("/roadmap");
+  const isGepa = path.startsWith("/gepa");
 
   const tab = (
     href: string,
@@ -31,12 +32,14 @@ export default function NavTabs() {
         letterSpacing: "0.12em",
         textTransform: "uppercase",
         textDecoration: "none",
-        color: active ? (isCouncil && active ? "#b8902a" : isRoadmap && active ? "#a78bfa" : "var(--accent)") : "var(--text-dim)",
+        color: active ? (isCouncil && active ? "#b8902a" : isRoadmap && active ? "#a78bfa" : isGepa && active ? "#34d399" : "var(--accent)") : "var(--text-dim)",
         background: active
           ? isCouncil
             ? "rgba(184,144,42,0.1)"
             : isRoadmap
             ? "rgba(167,139,250,0.1)"
+            : isGepa
+            ? "rgba(52,211,153,0.1)"
             : "var(--accent-dim)"
           : "transparent",
         border: `1px solid ${
@@ -45,6 +48,8 @@ export default function NavTabs() {
               ? "rgba(184,144,42,0.25)"
               : isRoadmap
               ? "rgba(167,139,250,0.25)"
+              : isGepa
+              ? "rgba(52,211,153,0.25)"
               : "var(--accent-dim)"
             : "transparent"
         }`,
@@ -78,6 +83,7 @@ export default function NavTabs() {
       {tab("/sprints", "Sprint", isSprint, "⚡")}
       {tab("/roadmap", "Roadmap", isRoadmap, "◈")}
       {tab("/council", "The Council", isCouncil, "⬡")}
+      {tab("/gepa", "GEPA Lab", isGepa, "◎")}
     </nav>
   );
 }
